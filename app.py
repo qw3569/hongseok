@@ -1,12 +1,12 @@
 import streamlit as st
-import openai
+from openai import OpenAI # 변경된 부분: 이렇게 불러와야 해요
 
 # 페이지 설정
 st.set_page_config(page_title="6학년 국어 글 고쳐쓰기 도우미", page_icon="📝", layout="wide")
 
-# 비밀번호(API 키) 가져오기
+# API 클라이언트 설정 (변경된 방식)
 try:
-    openai.api_key = st.secrets["OPENAI_API_KEY"]
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except:
     st.error("선생님! API 키 설정이 필요해요. (Streamlit Secrets에 설정해주세요)")
 
@@ -39,11 +39,15 @@ def get_feedback(title, content):
     마지막엔 3줄 총평을 남겨주세요.
     """
     try:
-        response = openai.ChatCompletion.create(
+        # 변경된 명령어 부분
+        response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "system", "content": "Helpful teacher assistant."}, {"role": "user", "content": prompt}]
+            messages=[
+                {"role": "system", "content": "Helpful teacher assistant."}, 
+                {"role": "user", "content": prompt}
+            ]
         )
-        return response.choices[0].message['content']
+        return response.choices[0].message.content # 여기도 대괄호['content']가 아니라 점.content로 바뀜
     except Exception as e:
         return f"오류가 났어요: {str(e)}"
 
