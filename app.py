@@ -1,36 +1,100 @@
-# 4. 분석 함수 (학습 자료 내용 반영)
+import streamlit as st
+from openai import OpenAI
+import base64
+
+# 페이지 설정
+st.set_page_config(
+    page_title="논설문 첨삭 도우미 (오홍석 선생님)",
+    page_icon="✒️",
+    layout="wide"
+)
+
+# 1. API 클라이언트 설정
+try:
+    if "OPENAI_API_KEY" in st.secrets:
+        client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    else:
+        st.error("🚨 API 키 설정이 필요합니다. (Streamlit Secrets 확인 필요)")
+        st.stop()
+except Exception as e:
+    st.error(f"시스템 오류 발생: {e}")
+    st.stop()
+
+# 2. 화면 디자인
+st.title("✒️ AI 논설문 첨삭 도우미")
+st.markdown("""
+### 종이에 쓴 글도 OK! 사진만 찍어 올리세요.
+직접 타이핑해서 넣어도 되고, **공책에 쓴 글을 사진으로 찍어서** 올려도 됩니다.  
+**오홍석 선생님의 비서 AI가 날카롭게 분석해 드립니다.**
+""")
+
+col1, col2 = st.columns(2)
+
+# 이미지 파일을 base64로 변환하는 함수
+def encode_image(uploaded_file):
+    if uploaded_file is not None:
+        return base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+    return None
+
+# 3. 입력 창
+with col1:
+    st.info("👇 글을 입력하거나 사진을 올리세요")
+    
+    tab1, tab2 = st.tabs(["⌨️ 직접 입력하기", "📷 사진 올리기 (최대 2장)"])
+    
+    with tab1:
+        title_input = st.text_input("제목 (직접 입력)", placeholder="제목을 입력하세요")
+        content_input = st.text_area("본문 내용 (직접 입력)", height=500, placeholder="내용을 입력하세요")
+        analyze_text_btn = st.button("📝 텍스트로 검토받기", type="primary", use_container_width=True)
+
+    with tab2:
+        uploaded_files = st.file_uploader(
+            "글씨가 잘 보이게 찍은 사진을 올려주세요 (최대 2장)", 
+            type=['png', 'jpg', 'jpeg'], 
+            accept_multiple_files=True
+        )
+        
+        if uploaded_files:
+            if len(uploaded_files) > 2:
+                st.warning("⚠️ 사진은 최대 2장까지만 선택해주세요. (앞의 2장만 분석합니다)")
+                uploaded_files = uploaded_files[:2]
+            
+            cols = st.columns(len(uploaded_files))
+            for idx, file in enumerate(uploaded_files):
+                with cols[idx]:
+                    st.image(file, caption=f"사진 {idx+1}", use_container_width=True)
+                    
+        analyze_image_btn = st.button("📸 사진으로 검토받기", type="primary", use_container_width=True)
+
+# 4. 분석 함수 (학습 자료 내용 반영 + 비판적 피드백)
 def analyze_content(input_type, title=None, content=None, image_files=None):
     
-    # 학습 자료 내용을 반영한 시스템 프롬프트
+    # 시스템 프롬프트: 학습 자료 기준 + 엄격한 페르소나
     system_prompt = """
     당신은 '오홍석 선생님의 스마트한 비서 AI'입니다. 
-    학생이 쓴 논설문을 [학습 자료: 논설문 잘 쓰는 법]의 기준에 맞춰 꼼꼼하게 분석하고 피드백해주세요.
-    
+    학생의 글을 [학습 자료: 논설문 잘 쓰는 법]의 기준에 맞춰 꼼꼼하게 분석해야 합니다.
+    단, 무조건적인 칭찬은 지양하고 **중학교 국어 교사의 시각에서 논리적 허점과 문장력을 비판적으로 검토**하세요.
+
     [핵심 평가 기준 (학습 자료 기반)]
     1. **서론의 전략:** 단순히 주장을 나열하지 않고, 아래 4가지 방법 중 하나를 사용하여 독자의 흥미를 끌었는가?
-       - 현상 제시 및 통계 활용
-       - 주변의 구체적인 사례 제시 (공감대 형성)
-       - 상반된 인식이나 주장 대립 제시
-       - 질문 던지기 (호기심 유발)
+       - 현상 제시 및 통계 활용 / 구체적인 사례 제시 / 상반된 인식 제시 / 질문 던지기
        
     2. **본론의 근거 타당성:** 주장을 뒷받침하기 위해 아래 3가지 유형의 근거를 적절히 활용했는가?
-       - 객관적 자료 및 통계 (신뢰성)
-       - 전문가의 의견 또는 인용
-       - 구체적인 사례 또는 경험
+       - 객관적 자료 및 통계 / 전문가의 의견 / 구체적인 사례 또는 경험
 
     3. **결론의 3단계 구조:** 결론이 흐지부지 끝나지 않고, 아래 3단계 흐름을 갖추었는가?
        - 1단계: 요약 및 재강조
-       - 2단계: 주장 재확인 (확신에 찬 표현 사용)
-       - 3단계: 전망 및 당부 (실천 촉구, 미래 전망, 화두 던지기)
+       - 2단계: 주장 재확인 (확신에 찬 표현)
+       - 3단계: 전망 및 당부 (실천 촉구, 미래 전망)
 
-    4. **기본 요건:** 주제 명확성, 문단 구분, 문장 호응, 맞춤법, 적절한 어휘 사용
+    4. **표현 및 어법:** 문장 호응이 자연스러운가? 모호한 표현은 없는가? 적절한 어휘를 사용했는가?
 
-    [피드백 작성 지침]
-    1. **말투:** 중학교 선생님처럼 냉철하지만, 학생이 납득할 수 있도록 논리적으로 설명하세요. (하십시오체/해요체 혼용)
-    2. **형식:** 각 기준에 대해 이모지(✅, 🔺, ❌)로 상태를 표시하세요.
-    3. **구체적 코칭(필수):** 
-       - 예를 들어 서론이 밋밋하다면, "서론에서 '질문 던지기' 전략을 써보면 어떨까요? 예를 들어..."라고 수업 내용을 인용해 제안하세요.
-       - 결론이 약하다면 "결론 3단계(요약-재확인-전망) 중 '전망 및 당부'가 빠졌습니다."라고 구체적으로 지적하세요.
+    [피드백 작성 지침 - 엄격 준수]
+    1. **말투:** 정중하지만 냉철한 어조(하십시오체/해요체 혼용)를 사용하세요. 빈말이나 과한 칭찬은 하지 마세요.
+    2. **형식:** 각 기준에 대해 이모지(✅:우수, 🔺:보통, ❌:미흡)로 상태를 표시하세요.
+    3. **구체적 수정 제안(가장 중요):** 
+       - "서론이 밋밋합니다"라고 끝내지 말고, **"서론에 '질문 던지기' 전략을 활용하여 '~하는 것은 어떨까요?'라는 문장으로 시작해 보세요."**라고 대안을 주세요.
+       - 문맥상 어색한 문장은 **"이 표현은 '~다'라고 고치는 것이 더 논리적입니다."**라고 직접 고쳐주세요.
     """
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -41,12 +105,12 @@ def analyze_content(input_type, title=None, content=None, image_files=None):
         - 제목: {title}
         - 내용: {content}
         
-        위 글을 학습한 논설문 작성법 기준에 맞춰 분석해주세요.
+        위 글을 학습한 논설문 작성법 기준에 맞춰 비판적으로 분석해주세요.
         """
         messages.append({"role": "user", "content": user_content})
 
     elif input_type == "image":
-        content_list = [{"type": "text", "text": "이미지의 글을 읽고 [추출된 텍스트]를 먼저 보여준 뒤, [학습 자료 기준 첨삭]을 진행해주세요."}]
+        content_list = [{"type": "text", "text": "이미지의 글을 읽고 먼저 **[추출된 텍스트]**를 보여준 뒤, [학습 자료 기준 정밀 첨삭]을 진행해주세요."}]
         for img_file in image_files:
             base64_image = encode_image(img_file)
             content_list.append({
@@ -65,3 +129,25 @@ def analyze_content(input_type, title=None, content=None, image_files=None):
         return response.choices[0].message.content
     except Exception as e:
         return f"시스템 오류가 발생했습니다: {str(e)}"
+
+# 5. 결과 출력
+with col2:
+    st.subheader("🧐 오홍석 선생님 비서 AI의 분석")
+    
+    if analyze_text_btn:
+        if not title_input or not content_input:
+            st.warning("제목과 내용을 입력해주세요.")
+        else:
+            with st.spinner("텍스트를 정밀 분석 중입니다..."):
+                result = analyze_content("text", title=title_input, content=content_input)
+                st.success("분석 완료!")
+                st.markdown(result)
+
+    if analyze_image_btn:
+        if not uploaded_files:
+            st.warning("사진을 먼저 올려주세요.")
+        else:
+            with st.spinner("비서 AI가 사진을 읽고 분석 중입니다... (시간이 조금 걸려요 ⏳)"):
+                result = analyze_content("image", image_files=uploaded_files)
+                st.success("분석 완료!")
+                st.markdown(result)
