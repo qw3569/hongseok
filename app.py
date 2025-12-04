@@ -20,7 +20,7 @@ except Exception as e:
     st.error(f"시스템 오류 발생: {e}")
     st.stop()
 
-# 2. 화면 디자인 (수정된 부분)
+# 2. 화면 디자인
 st.title("📸 AI 논설문 첨삭 도우미")
 st.markdown("""
 ### 종이에 쓴 글도 OK! 사진만 찍어 올리세요.
@@ -40,7 +40,7 @@ def encode_image(uploaded_file):
 with col1:
     st.info("👇 글을 입력하거나 사진을 올리세요")
     
-    tab1, tab2 = st.tabs(["⌨️ 직접 입력하기", "📷 사진 올리기"])
+    tab1, tab2 = st.tabs(["⌨️ 직접 입력하기", "📷 사진 올리기 (최대 2장)"])
     
     with tab1:
         title_input = st.text_input("제목 (직접 입력)", placeholder="제목을 입력하세요")
@@ -48,15 +48,31 @@ with col1:
         analyze_text_btn = st.button("📝 텍스트로 검토받기", type="primary", use_container_width=True)
 
     with tab2:
-        uploaded_file = st.file_uploader("글씨가 잘 보이게 찍은 사진을 올려주세요", type=['png', 'jpg', 'jpeg'])
-        if uploaded_file:
-            st.image(uploaded_file, caption="업로드된 사진", use_container_width=True)
+        # accept_multiple_files=True 옵션 추가
+        uploaded_files = st.file_uploader(
+            "글씨가 잘 보이게 찍은 사진을 올려주세요 (최대 2장)", 
+            type=['png', 'jpg', 'jpeg'], 
+            accept_multiple_files=True
+        )
+        
+        # 업로드된 이미지 미리보기
+        if uploaded_files:
+            if len(uploaded_files) > 2:
+                st.warning("⚠️ 사진은 최대 2장까지만 선택해주세요. (앞의 2장만 분석합니다)")
+                uploaded_files = uploaded_files[:2] # 2장까지만 자름
+            
+            # 사진 나란히 보여주기
+            cols = st.columns(len(uploaded_files))
+            for idx, file in enumerate(uploaded_files):
+                with cols[idx]:
+                    st.image(file, caption=f"사진 {idx+1}", use_container_width=True)
+                    
         analyze_image_btn = st.button("📸 사진으로 검토받기", type="primary", use_container_width=True)
 
 # 4. 분석 함수
-def analyze_content(input_type, title=None, content=None, image_base64=None):
+def analyze_content(input_type, title=None, content=None, image_files=None):
     
-    # 시스템 프롬프트 (비서 AI 페르소나 적용)
+    # 시스템 프롬프트
     system_prompt = """
     당신은 '오홍석 선생님의 스마트한 비서 AI'입니다. 
     하지만 글을 평가할 때는 **엄격하고 실력 있는 중학교 국어 선생님의 기준**을 적용해야 합니다.
@@ -87,20 +103,25 @@ def analyze_content(input_type, title=None, content=None, image_base64=None):
         messages.append({"role": "user", "content": user_content})
 
     elif input_type == "image":
-        messages.append({
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "이 이미지에 있는 글자들을 읽어서, 먼저 **[추출된 텍스트]**를 보여주고, 그 다음에 오홍석 선생님의 기준(13가지)에 맞춰서 **[첨삭 결과]**를 자세히 작성해 주세요."},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-            ]
-        })
+        # 이미지 전송용 메시지 내용 구성
+        content_list = [{"type": "text", "text": "첨부된 이미지(들)에 있는 글자들을 순서대로 이어서 읽어주세요. 먼저 **[추출된 텍스트]**를 보여주고, 그 다음에 오홍석 선생님의 기준(13가지)에 맞춰서 **[첨삭 결과]**를 자세히 작성해 주세요."}]
+        
+        # 여러 장의 이미지를 루프 돌며 추가
+        for img_file in image_files:
+            base64_image = encode_image(img_file)
+            content_list.append({
+                "type": "image_url", 
+                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+            })
+            
+        messages.append({"role": "user", "content": content_list})
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages,
             temperature=0.6,
-            max_tokens=2000
+            max_tokens=2500 # 사진이 2장이라 텍스트가 길어질 수 있으므로 토큰 늘림
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -120,14 +141,10 @@ with col2:
                 st.markdown(result)
 
     if analyze_image_btn:
-        if not uploaded_file:
+        if not uploaded_files:
             st.warning("사진을 먼저 올려주세요.")
         else:
-            with st.spinner("비서 AI가 사진을 읽고 분석 중입니다... (시간이 조금 걸려요 ⏳)"):
-                image_base64 = encode_image(uploaded_file)
-                if image_base64:
-                    result = analyze_content("image", image_base64=image_base64)
-                    st.success("분석 완료!")
-                    st.markdown(result)
-                else:
-                    st.error("이미지 처리에 실패했습니다.")
+            with st.spinner("비서 AI가 사진(들)을 읽고 분석 중입니다... (시간이 조금 걸려요 ⏳)"):
+                result = analyze_content("image", image_files=uploaded_files)
+                st.success("분석 완료!")
+                st.markdown(result)
