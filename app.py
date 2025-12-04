@@ -4,7 +4,7 @@ import base64
 
 # 페이지 설정
 st.set_page_config(
-    page_title="논설문 첨삭 도우미 (사진 인식 가능)",
+    page_title="논설문 첨삭 도우미 (오홍석 선생님)",
     page_icon="📸",
     layout="wide"
 )
@@ -20,27 +20,26 @@ except Exception as e:
     st.error(f"시스템 오류 발생: {e}")
     st.stop()
 
-# 2. 화면 디자인
+# 2. 화면 디자인 (수정된 부분)
 st.title("📸 AI 논설문 첨삭 도우미")
 st.markdown("""
 ### 종이에 쓴 글도 OK! 사진만 찍어 올리세요.
-직접 타이핑해서 넣어도 되고, **공책에 쓴 글을 사진으로 찍어서** 올려도 됩니다.
-중학교 국어 선생님이 여러분의 글을 꼼꼼하고 날카롭게 분석해 드립니다.
+직접 타이핑해서 넣어도 되고, **공책에 쓴 글을 사진으로 찍어서** 올려도 됩니다.  
+**오홍석 선생님의 비서 AI가 날카롭게 분석해 드립니다.**
 """)
 
 col1, col2 = st.columns(2)
 
-# 이미지 파일을 base64로 변환하는 함수 (AI에게 보내기 위해 필요)
+# 이미지 파일을 base64로 변환하는 함수
 def encode_image(uploaded_file):
     if uploaded_file is not None:
         return base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
     return None
 
-# 3. 입력 창 (텍스트 or 이미지 선택)
+# 3. 입력 창
 with col1:
     st.info("👇 글을 입력하거나 사진을 올리세요")
     
-    # 탭을 만들어 입력 방식을 선택하게 함
     tab1, tab2 = st.tabs(["⌨️ 직접 입력하기", "📷 사진 올리기"])
     
     with tab1:
@@ -54,12 +53,13 @@ with col1:
             st.image(uploaded_file, caption="업로드된 사진", use_container_width=True)
         analyze_image_btn = st.button("📸 사진으로 검토받기", type="primary", use_container_width=True)
 
-# 4. 분석 함수 (텍스트용 & 이미지용 통합)
+# 4. 분석 함수
 def analyze_content(input_type, title=None, content=None, image_base64=None):
     
-    # 공통 시스템 프롬프트 (중학교 교사 페르소나)
+    # 시스템 프롬프트 (비서 AI 페르소나 적용)
     system_prompt = """
-    당신은 엄격하지만 실력 있는 '중학교 국어 선생님'입니다.
+    당신은 '오홍석 선생님의 스마트한 비서 AI'입니다. 
+    하지만 글을 평가할 때는 **엄격하고 실력 있는 중학교 국어 선생님의 기준**을 적용해야 합니다.
     학생의 글을 읽고 논리적 허점과 문장력을 비판적으로 분석하여, 글의 수준을 높일 수 있는 구체적인 수정안을 제시하세요.
     
     [평가 기준 13가지]
@@ -82,26 +82,25 @@ def analyze_content(input_type, title=None, content=None, image_base64=None):
         - 제목: {title}
         - 내용: {content}
         
-        위 글을 13가지 기준으로 비판적으로 분석해주세요.
+        위 글을 오홍석 선생님의 기준(13가지)으로 비판적으로 분석해주세요.
         """
         messages.append({"role": "user", "content": user_content})
 
     elif input_type == "image":
-        # 이미지일 경우: 1. 텍스트 추출 요청 + 2. 피드백 요청을 동시에 수행
         messages.append({
             "role": "user",
             "content": [
-                {"type": "text", "text": "이 이미지에 있는 글자들을 읽어서, 먼저 **[추출된 텍스트]**를 보여주고, 그 다음에 위 13가지 기준에 맞춰서 **[첨삭 결과]**를 자세히 작성해 주세요."},
+                {"type": "text", "text": "이 이미지에 있는 글자들을 읽어서, 먼저 **[추출된 텍스트]**를 보여주고, 그 다음에 오홍석 선생님의 기준(13가지)에 맞춰서 **[첨삭 결과]**를 자세히 작성해 주세요."},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
             ]
         })
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o", # gpt-4o는 이미지 인식(Vision) 기능이 포함되어 있습니다.
+            model="gpt-4o",
             messages=messages,
             temperature=0.6,
-            max_tokens=2000 # 출력이 길어질 수 있으므로 여유 있게 설정
+            max_tokens=2000
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -109,25 +108,22 @@ def analyze_content(input_type, title=None, content=None, image_base64=None):
 
 # 5. 결과 출력
 with col2:
-    st.subheader("🧐 분석 결과")
+    st.subheader("🧐 오홍석 선생님 비서 AI의 분석")
     
-    # 텍스트로 검토 요청 시
     if analyze_text_btn:
         if not title_input or not content_input:
             st.warning("제목과 내용을 입력해주세요.")
         else:
-            with st.spinner("텍스트를 분석 중입니다..."):
+            with st.spinner("비서 AI가 텍스트를 분석 중입니다..."):
                 result = analyze_content("text", title=title_input, content=content_input)
                 st.success("분석 완료!")
                 st.markdown(result)
 
-    # 사진으로 검토 요청 시
     if analyze_image_btn:
         if not uploaded_file:
             st.warning("사진을 먼저 올려주세요.")
         else:
-            with st.spinner("사진에서 글자를 읽어내고 분석 중입니다... (시간이 조금 걸려요 ⏳)"):
-                # 이미지 인코딩
+            with st.spinner("비서 AI가 사진을 읽고 분석 중입니다... (시간이 조금 걸려요 ⏳)"):
                 image_base64 = encode_image(uploaded_file)
                 if image_base64:
                     result = analyze_content("image", image_base64=image_base64)
@@ -135,4 +131,3 @@ with col2:
                     st.markdown(result)
                 else:
                     st.error("이미지 처리에 실패했습니다.")
-
