@@ -1,93 +1,36 @@
-import streamlit as st
-from openai import OpenAI
-import base64
-
-# 페이지 설정
-st.set_page_config(
-    page_title="논설문 첨삭 도우미 (오홍석 선생님)",
-    page_icon="📸",
-    layout="wide"
-)
-
-# 1. API 클라이언트 설정
-try:
-    if "OPENAI_API_KEY" in st.secrets:
-        client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    else:
-        st.error("🚨 API 키 설정이 필요합니다. (Streamlit Secrets 확인 필요)")
-        st.stop()
-except Exception as e:
-    st.error(f"시스템 오류 발생: {e}")
-    st.stop()
-
-# 2. 화면 디자인
-st.title("📸 AI 논설문 첨삭 도우미")
-st.markdown("""
-### 종이에 쓴 글도 OK! 사진만 찍어 올리세요.
-직접 타이핑해서 넣어도 되고, **공책에 쓴 글을 사진으로 찍어서** 올려도 됩니다.  
-**오홍석 선생님의 비서 AI가 날카롭게 분석해 드립니다.**
-""")
-
-col1, col2 = st.columns(2)
-
-# 이미지 파일을 base64로 변환하는 함수
-def encode_image(uploaded_file):
-    if uploaded_file is not None:
-        return base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-    return None
-
-# 3. 입력 창
-with col1:
-    st.info("👇 글을 입력하거나 사진을 올리세요")
-    
-    tab1, tab2 = st.tabs(["⌨️ 직접 입력하기", "📷 사진 올리기 (최대 2장)"])
-    
-    with tab1:
-        title_input = st.text_input("제목 (직접 입력)", placeholder="제목을 입력하세요")
-        content_input = st.text_area("본문 내용 (직접 입력)", height=400, placeholder="내용을 입력하세요")
-        analyze_text_btn = st.button("📝 텍스트로 검토받기", type="primary", use_container_width=True)
-
-    with tab2:
-        # accept_multiple_files=True 옵션 추가
-        uploaded_files = st.file_uploader(
-            "글씨가 잘 보이게 찍은 사진을 올려주세요 (최대 2장)", 
-            type=['png', 'jpg', 'jpeg'], 
-            accept_multiple_files=True
-        )
-        
-        # 업로드된 이미지 미리보기
-        if uploaded_files:
-            if len(uploaded_files) > 2:
-                st.warning("⚠️ 사진은 최대 2장까지만 선택해주세요. (앞의 2장만 분석합니다)")
-                uploaded_files = uploaded_files[:2] # 2장까지만 자름
-            
-            # 사진 나란히 보여주기
-            cols = st.columns(len(uploaded_files))
-            for idx, file in enumerate(uploaded_files):
-                with cols[idx]:
-                    st.image(file, caption=f"사진 {idx+1}", use_container_width=True)
-                    
-        analyze_image_btn = st.button("📸 사진으로 검토받기", type="primary", use_container_width=True)
-
-# 4. 분석 함수
+# 4. 분석 함수 (학습 자료 내용 반영)
 def analyze_content(input_type, title=None, content=None, image_files=None):
     
-    # 시스템 프롬프트
+    # 학습 자료 내용을 반영한 시스템 프롬프트
     system_prompt = """
     당신은 '오홍석 선생님의 스마트한 비서 AI'입니다. 
-    하지만 글을 평가할 때는 **엄격하고 실력 있는 중학교 국어 선생님의 기준**을 적용해야 합니다.
-    학생의 글을 읽고 논리적 허점과 문장력을 비판적으로 분석하여, 글의 수준을 높일 수 있는 구체적인 수정안을 제시하세요.
+    학생이 쓴 논설문을 [학습 자료: 논설문 잘 쓰는 법]의 기준에 맞춰 꼼꼼하게 분석하고 피드백해주세요.
     
-    [평가 기준 13가지]
-    1. 주제 명확성 2. 독자 고려 3. 문단 통일성 4. 문장 호응 5. 모호한 표현 지양
-    6. 논리적 문단 배열 7. 제목의 적절성 8. 적절하고 정확한 어휘 9. 군더더기 문장 삭제
-    10. 맞춤법/띄어쓰기 11. 근거 자료 출처 12. 문단 구분 13. 3단 구성(서론-본론-결론)
+    [핵심 평가 기준 (학습 자료 기반)]
+    1. **서론의 전략:** 단순히 주장을 나열하지 않고, 아래 4가지 방법 중 하나를 사용하여 독자의 흥미를 끌었는가?
+       - 현상 제시 및 통계 활용
+       - 주변의 구체적인 사례 제시 (공감대 형성)
+       - 상반된 인식이나 주장 대립 제시
+       - 질문 던지기 (호기심 유발)
+       
+    2. **본론의 근거 타당성:** 주장을 뒷받침하기 위해 아래 3가지 유형의 근거를 적절히 활용했는가?
+       - 객관적 자료 및 통계 (신뢰성)
+       - 전문가의 의견 또는 인용
+       - 구체적인 사례 또는 경험
 
-    [출력 지침]
-    1. 각 번호 앞에 이모지(✅, 🔺, ❌) 표시.
-    2. 무조건적인 칭찬 지양. 냉정하고 객관적인 어조 유지.
-    3. **수정 제안 필수:** 문맥상 어색한 부분은 "이 문장은 ~게 고치는 것이 더 자연스럽습니다"라고 대안 제시.
-    4. 어휘 수준을 높일 수 있는 표현 적극 제안.
+    3. **결론의 3단계 구조:** 결론이 흐지부지 끝나지 않고, 아래 3단계 흐름을 갖추었는가?
+       - 1단계: 요약 및 재강조
+       - 2단계: 주장 재확인 (확신에 찬 표현 사용)
+       - 3단계: 전망 및 당부 (실천 촉구, 미래 전망, 화두 던지기)
+
+    4. **기본 요건:** 주제 명확성, 문단 구분, 문장 호응, 맞춤법, 적절한 어휘 사용
+
+    [피드백 작성 지침]
+    1. **말투:** 중학교 선생님처럼 냉철하지만, 학생이 납득할 수 있도록 논리적으로 설명하세요. (하십시오체/해요체 혼용)
+    2. **형식:** 각 기준에 대해 이모지(✅, 🔺, ❌)로 상태를 표시하세요.
+    3. **구체적 코칭(필수):** 
+       - 예를 들어 서론이 밋밋하다면, "서론에서 '질문 던지기' 전략을 써보면 어떨까요? 예를 들어..."라고 수업 내용을 인용해 제안하세요.
+       - 결론이 약하다면 "결론 3단계(요약-재확인-전망) 중 '전망 및 당부'가 빠졌습니다."라고 구체적으로 지적하세요.
     """
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -98,22 +41,18 @@ def analyze_content(input_type, title=None, content=None, image_files=None):
         - 제목: {title}
         - 내용: {content}
         
-        위 글을 오홍석 선생님의 기준(13가지)으로 비판적으로 분석해주세요.
+        위 글을 학습한 논설문 작성법 기준에 맞춰 분석해주세요.
         """
         messages.append({"role": "user", "content": user_content})
 
     elif input_type == "image":
-        # 이미지 전송용 메시지 내용 구성
-        content_list = [{"type": "text", "text": "첨부된 이미지(들)에 있는 글자들을 순서대로 이어서 읽어주세요. 먼저 **[추출된 텍스트]**를 보여주고, 그 다음에 오홍석 선생님의 기준(13가지)에 맞춰서 **[첨삭 결과]**를 자세히 작성해 주세요."}]
-        
-        # 여러 장의 이미지를 루프 돌며 추가
+        content_list = [{"type": "text", "text": "이미지의 글을 읽고 [추출된 텍스트]를 먼저 보여준 뒤, [학습 자료 기준 첨삭]을 진행해주세요."}]
         for img_file in image_files:
             base64_image = encode_image(img_file)
             content_list.append({
                 "type": "image_url", 
                 "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
             })
-            
         messages.append({"role": "user", "content": content_list})
 
     try:
@@ -121,30 +60,8 @@ def analyze_content(input_type, title=None, content=None, image_files=None):
             model="gpt-4o",
             messages=messages,
             temperature=0.6,
-            max_tokens=2500 # 사진이 2장이라 텍스트가 길어질 수 있으므로 토큰 늘림
+            max_tokens=2500
         )
         return response.choices[0].message.content
     except Exception as e:
         return f"시스템 오류가 발생했습니다: {str(e)}"
-
-# 5. 결과 출력
-with col2:
-    st.subheader("🧐 오홍석 선생님 비서 AI의 분석")
-    
-    if analyze_text_btn:
-        if not title_input or not content_input:
-            st.warning("제목과 내용을 입력해주세요.")
-        else:
-            with st.spinner("비서 AI가 텍스트를 분석 중입니다..."):
-                result = analyze_content("text", title=title_input, content=content_input)
-                st.success("분석 완료!")
-                st.markdown(result)
-
-    if analyze_image_btn:
-        if not uploaded_files:
-            st.warning("사진을 먼저 올려주세요.")
-        else:
-            with st.spinner("비서 AI가 사진(들)을 읽고 분석 중입니다... (시간이 조금 걸려요 ⏳)"):
-                result = analyze_content("image", image_files=uploaded_files)
-                st.success("분석 완료!")
-                st.markdown(result)
