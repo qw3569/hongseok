@@ -37,7 +37,8 @@ col1, col2 = st.columns(2)
 # 이미지 인코딩 함수
 def encode_image(uploaded_file):
     if uploaded_file is not None:
-        return base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+        uploaded_file.seek(0)
+        return base64.b64encode(uploaded_file.read()).decode('utf-8')
     return None
 
 # [기능 1] 이미지 텍스트 추출
@@ -58,40 +59,43 @@ def extract_text_from_images(image_files):
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"오류 발생: {str(e)}"
+        return f"Error: {str(e)}"
 
-# [기능 2] 최종 분석 함수 (예시 제공 기능 강화)
+# [기능 2] 최종 분석 함수 (심층 사고 로직 강화)
 def analyze_final_text(title, content):
     system_prompt = """
     당신은 '오홍석 선생님의 스마트한 비서 AI'이자, 날카로운 분석력을 가진 중학교 국어 교사입니다.
-    학생의 글을 **아래 13가지 평가 기준**에 맞춰 분석하되, 단순히 지적만 하지 말고 **"어떻게 고쳐야 하는지" 구체적인 예시 문장(Rewrite)**을 반드시 제공해야 합니다.
+    학생의 글을 13가지 평가 기준에 맞춰 분석하고, 부족한 부분은 **'더 나은 표현'으로 수정 예시**를 제공해야 합니다.
+
+    [⚠️ 수정 예시(Rewrite) 작성 시 심층 사고 가이드라인 - 매우 중요]
+    수정 예시를 제시하기 전에 반드시 **내부적으로 다음 3가지를 검증**한 후 출력하세요.
+    1. **맥락 유지:** 학생이 원래 말하려던 의도가 왜곡되지 않았는가?
+    2. **확실한 개선:** 내가 제안하는 문장이 원문보다 **확실히 더 논리적이거나 간결한가?** (별 차이가 없거나 더 어색하면 고치지 마세요.)
+    3. **수준 적절성:** 중학생 수준에서 너무 현학적이거나 어려운 단어를 쓰지 않았는가?
 
     [상세 평가 가이드라인 (13가지 기준 + 학습 자료)]
-    1. **주제 명확성:** 주제가 일관된가?
-    2. **독자 고려:** 서론 전략(질문/사례/통계 등)을 썼는가? 경어체(높임말)를 썼는가?
-    3. **문단 중심생각:** 한 문단에 하나의 소주제만 있는가?
-    4. **문장 호응:** 주어-서술어 호응이 맞는가? (비문 수정 필수)
-    5. **표현의 적절성:** 모호하거나 과격한 표현은 없는가?
-    6. **문단 순서:** 논리 전개가 자연스러운가?
-    7. **제목:** 흥미를 끄는 제목인가?
-    8. **어휘:** 적절하고 정확한 어휘인가?
-    9. **통일성:** 불필요한 문장은 없는가?
-    10. **맞춤법:** 오탈자 체크 (3개 이상)
-    11. **근거 및 출처:** 근거 유형(통계/사례/전문가) 다양성 및 출처 명기 여부.
-    12. **문단 구분:** 들여쓰기 및 시각적 구분.
-    13. **논설문 짜임:** 서론-본론-결론 구조. **특히 결론이 [요약-재확인-전망] 단계를 갖췄는가?**
+    1. **주제 명확성:** 주제 일관성 확인.
+    2. **독자 고려:** 서론 전략(질문/통계 등) 및 높임말 사용 여부.
+    3. **문단 중심생각:** 한 문단 일물일어(一物一語) 원칙 준수 여부.
+    4. **문장 호응:** 주어-서술어 호응 등 비문 분석.
+    5. **표현의 적절성:** 모호하거나 과격한 표현 지양.
+    6. **문단 순서:** 논리 전개 순서.
+    7. **제목:** 호기심 자극 여부.
+    8. **어휘:** 문맥에 맞는 적절한 어휘 사용.
+    9. **통일성:** 통일성을 해치는 문장 삭제 권고.
+    10. **맞춤법:** 오탈자 정밀 체크.
+    11. **근거 및 출처:** 근거 유형 다양화 및 출처 명기.
+    12. **문단 구분:** 들여쓰기 확인.
+    13. **논설문 짜임:** 서론-본론-결론(요약/재확인/전망) 구조 완결성.
 
-    [피드백 작성 규칙 - 예시 강화]
+    [피드백 작성 규칙]
     1. **말투:** 정중하지만 냉철한 분석조(하십시오체/해요체).
     2. **형식:** 각 번호마다 이모지(✅, 🔺, ❌) 표시.
-    3. **구체적 개선 예시 (가장 중요):**
-       - 🔺나 ❌ 평가를 내린 항목은 **반드시 "이렇게 바꿔보세요"라고 예시 문장을 작성해 주세요.**
-       - (예시) "서론이 밋밋합니다." (X) 
-       - (예시) "서론에 독자의 흥미를 끄는 요소가 부족합니다. **질문 던지기 전략을 활용하여 다음과 같이 시작해보면 어떨까요?**
-         👉 **수정 예시:** '여러분은 하루에 스마트폰을 몇 시간이나 보시나요? 무심코 보는 스마트폰이 우리 뇌를 병들게 하고 있다는 사실, 알고 계셨나요?'"
-       - (예시) "근거가 빈약합니다." (X)
-       - (예시) "근거에 구체적인 수치가 빠져있습니다. **다음과 같이 통계 자료를 인용하는 문장을 추가해 보세요.**
-         👉 **수정 예시:** '최근 교육부의 2023년 조사 결과에 따르면, 청소년의 40%가 스마트폰 과의존 위험군에 속한다고 합니다.'"
+    3. **수정 제안 (Deep Thinking 적용):** 
+       - 🔺나 ❌ 항목은 반드시 **"수정 제안"**을 포함하세요.
+       - 단순히 문장을 바꾸는 게 아니라 **"왜 이렇게 바꾸는 게 더 좋은지" 이유를 짧게 설명**하고 예시를 보여주세요.
+       - (예시) "이 문장은 주어와 서술어가 멀어서 의미가 불분명합니다. 다음과 같이 문장을 나누어 쓰면 훨씬 명확해집니다."
+         👉 **수정 제안:** "..."
     """
 
     user_content = f"""
@@ -99,7 +103,7 @@ def analyze_final_text(title, content):
     - 제목: {title}
     - 내용: {content}
     
-    위 글을 분석해주세요. 특히 부족한 부분은 '직접 고쳐쓴 예시 문장'을 들어서 설명해주세요.
+    위 글을 분석해주세요. 수정 예시를 들 때는 그 예시가 문맥상 정말 적절한지 깊게 생각하고 작성해주세요.
     """
 
     try:
@@ -146,13 +150,20 @@ with col1:
             
             if st.button("🔍 사진에서 글자 추출하기 (클릭)", type="secondary", use_container_width=True):
                 with st.spinner("사진을 읽고 있습니다... ⏳"):
-                    extracted_text = extract_text_from_images(uploaded_files)
-                    st.session_state['extracted_text'] = extracted_text
-                    st.success("글자를 읽어왔습니다! 아래에서 확인하고 수정해주세요.")
+                    result_text = extract_text_from_images(uploaded_files)
+                    
+                    if result_text.startswith("Error"):
+                        st.error(f"이미지 읽기 실패: {result_text}")
+                    else:
+                        st.session_state['extracted_text'] = result_text
+                        st.success("글자를 읽어왔습니다! 아래에서 확인해주세요.")
+                        st.rerun()
 
         if st.session_state['extracted_text']:
             st.markdown("---")
             st.subheader("🧐 텍스트 확인 및 수정")
+            st.caption("AI가 사진을 잘못 읽은 부분이 있다면 직접 고쳐주세요.")
+            
             title_input_2 = st.text_input("글의 제목을 적어주세요", placeholder="제목 입력", key="t2")
             content_input_2 = st.text_area(
                 "추출된 본문 내용 (수정 가능)", 
@@ -170,7 +181,7 @@ with col2:
         if not title_input_1 or not content_input_1:
             st.warning("제목과 내용을 입력해주세요.")
         else:
-            with st.spinner("예시를 포함하여 정밀 분석 중입니다..."):
+            with st.spinner("예시의 적절성을 검토하며 분석 중입니다..."):
                 result = analyze_final_text(title_input_1, content_input_1)
                 st.success("분석 완료!")
                 st.markdown(result)
@@ -180,7 +191,7 @@ with col2:
             if not title_input_2 or not content_input_2:
                 st.warning("제목과 본문을 확인해주세요.")
             else:
-                with st.spinner("예시를 포함하여 정밀 분석 중입니다..."):
+                with st.spinner("예시의 적절성을 검토하며 분석 중입니다..."):
                     result = analyze_final_text(title_input_2, content_input_2)
                     st.success("분석 완료!")
                     st.markdown(result)
